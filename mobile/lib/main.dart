@@ -35,6 +35,13 @@ class MyApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,
+          // Add textSelectionTheme to override cursor color globally
+          textSelectionTheme: const TextSelectionThemeData(
+            cursorColor: Colors.black,
+            selectionColor: Color(0x3310A37F),
+            selectionHandleColor: Color(0xFF10A37F),
+          ),
+          
           // ChatGPT Color Scheme
           colorScheme: const ColorScheme.light(
             primary: Color(0xFF10A37F), // ChatGPT Green

@@ -254,24 +254,52 @@ Remember: Users appreciate comprehensive, well-organized responses that go beyon
     // Always include system message for comprehensive responses
     const messagesWithSystem = [systemMessage, ...openaiMessages];
 
-    // Determine max tokens based on model - use maximum available for unlimited usage
+    // Determine max tokens based on model - leave room for input tokens
     let maxTokens;
+    let modelContextLimit;
+    
     switch (modelToUse) {
       case 'gpt-4':
-        maxTokens = 8192; // GPT-4's maximum output tokens
+        maxTokens = 4096; // Reduced from 8192 to leave room for input (total context: 8192)
+        modelContextLimit = 8192;
         break;
       case 'gpt-4o':
-        maxTokens = 16384; // GPT-4o's updated maximum output tokens
+        maxTokens = 8192; // Reduced from 16384 to leave room for input (total context: 128k)
+        modelContextLimit = 128000;
         break;
       case 'gpt-4-turbo':
-        maxTokens = 4096; // GPT-4 Turbo optimal output tokens (can go higher)
+        maxTokens = 4096; // Keep same - good balance for input/output (total context: 128k)
+        modelContextLimit = 128000;
         break;
       case 'gpt-3.5-turbo':
-        maxTokens = 16384; // GPT-3.5-turbo's updated maximum output tokens
+        maxTokens = 3072; // Reduced from 4096 to leave room for input (total context: 16k)
+        modelContextLimit = 16384;
         break;
       default:
-        maxTokens = 4096; // Safe default
+        maxTokens = 2048; // Conservative default to ensure room for input
+        modelContextLimit = 8192;
     }
+
+    // Estimate input tokens (rough approximation: 1 token ≈ 4 characters)
+    const estimatedInputTokens = Math.ceil(
+      messagesWithSystem.reduce((total, msg) => {
+        if (typeof msg.content === 'string') {
+          return total + msg.content.length / 4;
+        }
+        return total;
+      }, 0)
+    );
+
+    // Adjust max_tokens to ensure total doesn't exceed context limit
+    const adjustedMaxTokens = Math.min(
+      maxTokens, 
+      modelContextLimit - estimatedInputTokens - 100 // 100 token safety buffer
+    );
+
+    // Ensure we have at least 512 tokens for output
+    const finalMaxTokens = Math.max(512, adjustedMaxTokens);
+
+    console.log(`Estimated input tokens: ${estimatedInputTokens}, Adjusted max_tokens: ${finalMaxTokens} (Model context limit: ${modelContextLimit})`);
 
     // For large requests or code generation, we can omit max_tokens to allow unlimited generation
     const completionConfig = {
@@ -295,12 +323,10 @@ Remember: Users appreciate comprehensive, well-organized responses that go beyon
        msg.content.toLowerCase().includes('develop'))
     );
 
-    // For large requests like code generation, omit max_tokens for unlimited output
-    if (!isLargeRequest) {
-      completionConfig.max_tokens = maxTokens;
-    }
+    // Always set max_tokens to prevent context length issues
+    completionConfig.max_tokens = finalMaxTokens;
 
-    console.log(`Processing ${isLargeRequest ? 'large' : 'standard'} request with model: ${modelToUse}${isLargeRequest ? ' (unlimited tokens)' : ` (max ${maxTokens} tokens)`}`);
+    console.log(`Processing ${isLargeRequest ? 'large' : 'standard'} request with model: ${modelToUse} (max ${finalMaxTokens} tokens)`);
 
     const completion = await openai.chat.completions.create(completionConfig);
 

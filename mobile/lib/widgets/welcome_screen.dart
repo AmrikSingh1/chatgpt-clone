@@ -104,15 +104,11 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       child: SingleChildScrollView(
                         child: Container(
                           width: double.infinity,
+                          height: MediaQuery.of(context).size.height - 200, // Account for input section
                           padding: const EdgeInsets.symmetric(horizontal: 24),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const SizedBox(height: 120),
-                              
-                              // Remove the green logo as per user request
-                              const SizedBox(height: 32),
-                              
                               // Title - adjusted to match original ChatGPT size
                               const Text(
                                 'What can I help with?',
@@ -127,8 +123,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                               
                               // Action cards
                               _buildActionCards(context),
-                              
-                              const SizedBox(height: 80),
                             ],
                           ),
                         ),
@@ -140,7 +134,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             ),
           ),
           
-          // Bottom input section
+          // Bottom input section - no gaps, sticks to bottom
           _buildInputSection(context),
         ],
       ),
@@ -204,196 +198,326 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
   Widget _buildInputSection(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      // Remove all padding and make it stick to bottom
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          top: BorderSide(
-            color: Color(0xFFE5E7EB),
-            width: 1,
-          ),
+        // Add rounded corners only on top-left and top-right with more curvature
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
         ),
-      ),
-      child: Column(
-        children: [
-          // Selected images preview
-          if (_selectedImages.isNotEmpty)
-            Container(
-              height: 80,
-              margin: const EdgeInsets.only(bottom: 16),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _selectedImages.length,
-                itemBuilder: (context, index) {
-                  return Container(
-                    width: 80,
-                    height: 80,
-                    margin: const EdgeInsets.only(right: 8),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: const Color(0xFFE5E7EB),
-                        width: 1,
-                      ),
-                    ),
-                    child: Stack(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(11),
-                          child: Image.file(
-                            _selectedImages[index],
-                            width: 80,
-                            height: 80,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                        Positioned(
-                          top: 4,
-                          right: 4,
-                          child: GestureDetector(
-                            onTap: () => _removeImage(index),
-                            child: Container(
-                              width: 20,
-                              height: 20,
-                              decoration: const BoxDecoration(
-                                color: Colors.black54,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.close,
-                                size: 12,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          
-          // Input field - Updated to match ChatGPT style
-          Container(
-            constraints: const BoxConstraints(
-              minHeight: 48,
-              maxHeight: 120,
-            ),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF4F4F4),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: const Color(0xFFE0E0E0),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // Attach button
-                Container(
-                  margin: const EdgeInsets.only(left: 4, bottom: 4),
-                  child: IconButton(
-                    icon: const Icon(
-                      Icons.attach_file,
-                      color: Color(0xFF666666),
-                      size: 22,
-                    ),
-                    onPressed: _selectFiles,
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size(40, 40),
-                      padding: EdgeInsets.zero,
-                    ),
-                  ),
-                ),
-                
-                // Text input
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    maxLines: null,
-                    textInputAction: TextInputAction.newline,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Color(0xFF000000),
-                    ),
-                    decoration: const InputDecoration(
-                      hintText: 'Ask anything',
-                      hintStyle: TextStyle(
-                        color: Color(0xFF8E8E93),
-                        fontSize: 16,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 12,
-                      ),
-                    ),
-                    onSubmitted: (_) {
-                      if (_canSend) {
-                        _sendMessage();
-                      }
-                    },
-                  ),
-                ),
-                
-                // Send or Mic button
-                Container(
-                  margin: const EdgeInsets.only(right: 4, bottom: 4),
-                  child: Consumer<ChatProvider>(
-                    builder: (context, chatProvider, child) {
-                      if (_canSend) {
-                        return IconButton(
-                          icon: chatProvider.isSendingMessage
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.arrow_upward,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                          style: IconButton.styleFrom(
-                            backgroundColor: const Color(0xFF000000),
-                            shape: const CircleBorder(),
-                            minimumSize: const Size(32, 32),
-                            padding: EdgeInsets.zero,
-                          ),
-                          onPressed: _canSend && !chatProvider.isSendingMessage
-                              ? _sendMessage
-                              : null,
-                        );
-                      } else {
-                        if (_isListening) {
-                          return _buildSpeechVisualization();
-                        } else {
-                          return IconButton(
-                            icon: const Icon(
-                              Icons.mic,
-                              color: Color(0xFF666666),
-                              size: 20,
-                            ),
-                            style: IconButton.styleFrom(
-                              minimumSize: const Size(32, 32),
-                              padding: EdgeInsets.zero,
-                            ),
-                            onPressed: _startListening,
-                          );
-                        }
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
+        // Add slightly stronger shadow on top to distinguish from screen content
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x12000000),
+            offset: Offset(0, -3),
+            blurRadius: 12,
+            spreadRadius: 0,
           ),
         ],
+      ),
+      child: SafeArea(
+        // Only apply safe area to bottom to avoid gaps
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Selected images preview
+              if (_selectedImages.isNotEmpty)
+                Container(
+                  height: 80,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _selectedImages.length,
+                    itemBuilder: (context, index) {
+                      return Container(
+                        width: 80,
+                        height: 80,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFFE5E7EB),
+                            width: 1,
+                          ),
+                        ),
+                        child: Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(11),
+                              child: Image.file(
+                                _selectedImages[index],
+                                width: 80,
+                                height: 80,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: GestureDetector(
+                                onTap: () => _removeImage(index),
+                                child: Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF6B7280),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.15),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.close,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              
+              // Input field - Updated to match original ChatGPT style with repositioned icons
+              Container(
+                constraints: const BoxConstraints(
+                  minHeight: 52,
+                  maxHeight: 120,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: const Color(0xFFE5E7EB),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Text input area
+                    Flexible(
+                      child: Container(
+                        constraints: const BoxConstraints(
+                          minHeight: 32,
+                          maxHeight: 80,
+                        ),
+                        child: TextField(
+                          controller: _messageController,
+                          maxLines: null,
+                          textInputAction: TextInputAction.newline,
+                          cursorColor: Colors.black,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: Color(0xFF000000),
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: 'Ask anything',
+                            hintStyle: TextStyle(
+                              color: Color(0xFF8E8E93),
+                              fontSize: 16,
+                            ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            errorBorder: InputBorder.none,
+                            focusedErrorBorder: InputBorder.none,
+                            disabledBorder: InputBorder.none,
+                            fillColor: Colors.transparent,
+                            filled: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                          ),
+                          onSubmitted: (_) {
+                            if (_canSend) {
+                              _sendMessage();
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    
+                    // Bottom row with icons
+                    Container(
+                      height: 40,
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Attach button
+                          PopupMenuButton<String>(
+                            icon: const Icon(
+                              Icons.attach_file,
+                              color: Color(0xFF666666),
+                              size: 22,
+                            ),
+                            iconSize: 22,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 32,
+                              minHeight: 32,
+                            ),
+                            offset: const Offset(0, -120),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            itemBuilder: (BuildContext context) => [
+                              const PopupMenuItem<String>(
+                                value: 'camera',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.camera_alt,
+                                      color: Colors.black,
+                                      size: 20,
+                                    ),
+                                    SizedBox(width: 12),
+                                    Text(
+                                      'Camera',
+                                      style: TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem<String>(
+                                value: 'photos',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.photo,
+                                      color: Colors.black,
+                                      size: 20,
+                                    ),
+                                    SizedBox(width: 12),
+                                    Text(
+                                      'Photos',
+                                      style: TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem<String>(
+                                value: 'files',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.insert_drive_file,
+                                      color: Colors.black,
+                                      size: 20,
+                                    ),
+                                    SizedBox(width: 12),
+                                    Text(
+                                      'Files',
+                                      style: TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            onSelected: (String value) {
+                              _handleAttachmentSelection(value);
+                            },
+                          ),
+                          
+                          // Send or Mic button
+                          Consumer<ChatProvider>(
+                            builder: (context, chatProvider, child) {
+                              final isTyping = chatProvider.isSendingMessage;
+                              final isStreaming = chatProvider.isStreaming;
+                              final isStreamingPaused = chatProvider.isStreamingPaused;
+                              
+                              // Show pause/resume button during the entire streaming process
+                              if (isStreaming || isTyping) {
+                                return IconButton(
+                                  icon: Icon(
+                                    isStreamingPaused ? Icons.play_arrow : Icons.pause,
+                                    color: const Color(0xFF666666),
+                                    size: 20,
+                                  ),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: const Color(0xFFE5E5E5),
+                                    shape: const CircleBorder(),
+                                    minimumSize: const Size(32, 32),
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                  onPressed: () {
+                                    if (isStreamingPaused) {
+                                      chatProvider.resumeStreaming();
+                                    } else {
+                                      chatProvider.pauseStreaming();
+                                    }
+                                  },
+                                );
+                              } else if (_canSend) {
+                                return IconButton(
+                                  icon: const Icon(
+                                    Icons.arrow_upward,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: const Color(0xFF000000),
+                                    shape: const CircleBorder(),
+                                    minimumSize: const Size(32, 32),
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                  onPressed: _sendMessage,
+                                );
+                              } else {
+                                if (_isListening) {
+                                  return _buildSpeechVisualization();
+                                } else {
+                                  return IconButton(
+                                    icon: const Icon(
+                                      Icons.mic,
+                                      color: Color(0xFF666666),
+                                      size: 20,
+                                    ),
+                                    style: IconButton.styleFrom(
+                                      minimumSize: const Size(32, 32),
+                                      padding: EdgeInsets.zero,
+                                    ),
+                                    onPressed: _startListening,
+                                  );
+                                }
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -449,7 +573,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         width: 32,
         height: 32,
         decoration: const BoxDecoration(
-          color: Color(0xFF007AFF),
+          color: Color(0xFF000000),
           shape: BoxShape.circle,
         ),
         child: Stack(
@@ -469,7 +593,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: const Color(0xFF007AFF).withOpacity(1.0 - value),
+                          color: const Color(0xFF000000).withOpacity(1.0 - value),
                           width: 2,
                         ),
                       ),
@@ -568,6 +692,39 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error stopping speech recognition: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleAttachmentSelection(String value) async {
+    try {
+      List<File> files = [];
+      
+      if (value == 'camera') {
+        final cameraFile = await _fileService.takePhoto();
+        if (cameraFile != null) {
+          files.add(cameraFile);
+        }
+      } else if (value == 'photos') {
+        files = await _fileService.pickImages(allowMultiple: true);
+      } else if (value == 'files') {
+        files = await _fileService.pickAnyFile();
+      }
+      
+      if (files.isNotEmpty) {
+        setState(() {
+          _selectedImages.addAll(files);
+        });
+        _updateSendButton();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error selecting files: $e'),
             backgroundColor: Colors.red,
           ),
         );

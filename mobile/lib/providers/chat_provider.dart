@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:dio/dio.dart';
 import '../models/chat.dart';
 import '../models/message.dart';
 import '../models/ai_model.dart';
@@ -11,6 +12,9 @@ class ChatProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
   final OpenAIService _openAIService = OpenAIService();
   final Uuid _uuid = const Uuid();
+  
+  // Cancellation token for current request
+  CancelToken? _currentRequestCancelToken;
 
   List<ChatPreview> _chatPreviews = [];
   Chat? _currentChat;
@@ -18,6 +22,8 @@ class ChatProvider with ChangeNotifier {
   String _selectedModel = 'gpt-3.5-turbo';
   bool _isLoading = false;
   bool _isSendingMessage = false;
+  bool _isStreaming = false;
+  bool _isStreamingPaused = false;
   String? _error;
 
   // Getters
@@ -28,6 +34,8 @@ class ChatProvider with ChangeNotifier {
   String get selectedModel => _selectedModel;
   bool get isLoading => _isLoading;
   bool get isSendingMessage => _isSendingMessage;
+  bool get isStreaming => _isStreaming;
+  bool get isStreamingPaused => _isStreamingPaused;
   String? get error => _error;
 
   // Initialize
@@ -198,6 +206,10 @@ class ChatProvider with ChangeNotifier {
 
       // Start backend processing (show typing indicator)
       _setSendingMessage(true);
+      _setStreaming(true); // Set streaming state for UI
+
+      // Create cancellation token for this request
+      _currentRequestCancelToken = CancelToken();
 
       // Upload images in background while showing the message instantly
       List<MessageImage> uploadedImages = [];
@@ -228,6 +240,7 @@ class ChatProvider with ChangeNotifier {
         content: content.isNotEmpty ? content : 'Image',
         images: uploadedImages,
         model: _selectedModel,
+        cancelToken: _currentRequestCancelToken,
       );
 
       // Update chat ID if it was a new chat
@@ -254,14 +267,25 @@ class ChatProvider with ChangeNotifier {
       
       // Stop typing indicator and update UI
       _setSendingMessage(false);
+      _setStreaming(false);
+      _currentRequestCancelToken = null;
       notifyListeners();
 
       // Refresh chat previews
       await loadChatPreviews();
 
     } catch (e) {
-      _setError('Failed to send message: ${e.toString()}');
+      // Handle cancellation gracefully
+      if (e is DioException && e.type == DioExceptionType.cancel) {
+        print('Request was cancelled by user');
+        // Don't show error for user-initiated cancellation
+      } else {
+        _setError('Failed to send message: ${e.toString()}');
+      }
+      
       _setSendingMessage(false);
+      _setStreaming(false);
+      _currentRequestCancelToken = null;
     }
   }
 
@@ -303,6 +327,40 @@ class ChatProvider with ChangeNotifier {
   void _setSendingMessage(bool sending) {
     _isSendingMessage = sending;
     notifyListeners();
+  }
+
+  void _setStreaming(bool streaming) {
+    _isStreaming = streaming;
+    notifyListeners();
+  }
+
+  void _setStreamingPaused(bool paused) {
+    _isStreamingPaused = paused;
+    notifyListeners();
+  }
+
+  void pauseStreaming() {
+    if (_isSendingMessage && !_isStreamingPaused) {
+      _setStreamingPaused(true);
+      // Cancel the current request
+      _currentRequestCancelToken?.cancel('Request paused by user');
+    }
+  }
+
+  void resumeStreaming() {
+    if (_isStreaming && _isStreamingPaused) {
+      _setStreamingPaused(false);
+      // Note: We can't resume a cancelled request, so this would need to restart
+      // For now, we'll just update the UI state
+    }
+  }
+
+  void stopStreaming() {
+    _currentRequestCancelToken?.cancel('Request stopped by user');
+    _currentRequestCancelToken = null;
+    _setStreaming(false);
+    _setStreamingPaused(false);
+    _setSendingMessage(false);
   }
 
   void _setError(String error) {
@@ -423,6 +481,10 @@ class ChatProvider with ChangeNotifier {
 
       // Start regenerating
       _setSendingMessage(true);
+      _setStreaming(true);
+
+      // Create cancellation token for this request
+      _currentRequestCancelToken = CancelToken();
 
       // Send regeneration request
       final response = await _apiService.sendMessage(
@@ -430,6 +492,7 @@ class ChatProvider with ChangeNotifier {
         content: userMessage.content,
         images: userMessage.images,
         model: _selectedModel,
+        cancelToken: _currentRequestCancelToken,
       );
 
       // Add new AI response
@@ -442,11 +505,22 @@ class ChatProvider with ChangeNotifier {
       );
 
       _setSendingMessage(false);
+      _setStreaming(false);
+      _currentRequestCancelToken = null;
       notifyListeners();
 
     } catch (e) {
-      _setError('Failed to regenerate message: ${e.toString()}');
+      // Handle cancellation gracefully
+      if (e is DioException && e.type == DioExceptionType.cancel) {
+        print('Regeneration request was cancelled by user');
+        // Don't show error for user-initiated cancellation
+      } else {
+        _setError('Failed to regenerate message: ${e.toString()}');
+      }
+      
       _setSendingMessage(false);
+      _setStreaming(false);
+      _currentRequestCancelToken = null;
     }
   }
 
@@ -466,6 +540,145 @@ class ChatProvider with ChangeNotifier {
       // Always restore the previous model after regeneration
       _selectedModel = previousModel;
       notifyListeners();
+    }
+  }
+
+  // Update user message content
+  Future<void> updateUserMessage(String messageId, String newContent) async {
+    if (_currentChat == null) return;
+
+    try {
+      // Find and update the message
+      final messages = List<Message>.from(_currentChat!.messages);
+      final messageIndex = messages.indexWhere((msg) => msg.id == messageId);
+      
+      if (messageIndex == -1) {
+        throw Exception('Message not found');
+      }
+
+      // Update the message content
+      messages[messageIndex] = messages[messageIndex].copyWith(content: newContent);
+      
+      // Update the current chat
+      _currentChat = _currentChat!.copyWith(
+        messages: messages,
+        updatedAt: DateTime.now(),
+      );
+
+      notifyListeners();
+
+      // Optionally update on server (implement later if needed)
+      // await _apiService.updateMessage(messageId, newContent);
+    } catch (e) {
+      _setError('Failed to update message: ${e.toString()}');
+    }
+  }
+
+  // Editing message state
+  String? _editingMessageId;
+  String? _editingMessageContent;
+
+  String? get editingMessageId => _editingMessageId;
+  String? get editingMessageContent => _editingMessageContent;
+
+  void setEditingMessage(String messageId, String content) {
+    _editingMessageId = messageId;
+    _editingMessageContent = content;
+    notifyListeners();
+  }
+
+  void clearEditingMessage() {
+    _editingMessageId = null;
+    _editingMessageContent = null;
+    notifyListeners();
+  }
+
+  // Send edited message and regenerate (using same method as regenerate)
+  Future<void> sendEditedMessage(String newContent) async {
+    if (_editingMessageId == null || _currentChat == null) return;
+
+    _clearError();
+
+    try {
+      // Find the message being edited
+      final messages = List<Message>.from(_currentChat!.messages);
+      final messageIndex = messages.indexWhere((msg) => msg.id == _editingMessageId);
+      
+      if (messageIndex == -1) {
+        throw Exception('Message not found');
+      }
+
+      // Update the edited message content (keep the same ID)
+      final editedMessage = messages[messageIndex].copyWith(content: newContent);
+      
+      // Remove all messages after the edited message (including AI responses)
+      final messagesToKeep = messages.take(messageIndex).toList();
+      messagesToKeep.add(editedMessage);
+
+      // Update the chat with the edited message
+      _currentChat = _currentChat!.copyWith(
+        messages: messagesToKeep,
+        updatedAt: DateTime.now(),
+      );
+
+      // Clear editing state
+      clearEditingMessage();
+      
+      notifyListeners();
+
+      // Start regenerating (same as regenerateLastMessage)
+      _setSendingMessage(true);
+      _setStreaming(true);
+
+      // Create cancellation token for this request
+      _currentRequestCancelToken = CancelToken();
+
+      // Send the edited message to get new AI response (same as regeneration)
+      final response = await _apiService.sendMessage(
+        chatId: _currentChat!.id,
+        content: newContent,
+        images: editedMessage.images, // Keep original images if any
+        model: _selectedModel,
+        cancelToken: _currentRequestCancelToken,
+      );
+
+      // Add new AI response
+      final aiMessage = Message.fromJson(response['aiMessage']);
+      final finalMessages = List<Message>.from(_currentChat!.messages)..add(aiMessage);
+
+      _currentChat = _currentChat!.copyWith(
+        messages: finalMessages,
+        updatedAt: DateTime.now(),
+      );
+
+      _setSendingMessage(false);
+      _setStreaming(false);
+      _currentRequestCancelToken = null;
+      notifyListeners();
+
+      // Refresh chat previews
+      await loadChatPreviews();
+
+    } catch (e) {
+      // Handle cancellation gracefully
+      if (e is DioException && e.type == DioExceptionType.cancel) {
+        print('Edited message request was cancelled by user');
+        // Don't show error for user-initiated cancellation
+      } else {
+        _setError('Failed to send edited message: ${e.toString()}');
+      }
+      
+      _setSendingMessage(false);
+      _setStreaming(false);
+      _currentRequestCancelToken = null;
+    }
+  }
+
+  // Track when message animation completes
+  void onMessageAnimationComplete() {
+    // Only update streaming state if we're currently streaming
+    if (_isStreaming && !_isSendingMessage) {
+      _setStreaming(false);
     }
   }
 } 

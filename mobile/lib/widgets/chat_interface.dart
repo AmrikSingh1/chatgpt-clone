@@ -15,11 +15,13 @@ class ChatInterface extends StatefulWidget {
 class _ChatInterfaceState extends State<ChatInterface> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _messageController = TextEditingController();
+  final FocusNode _inputFocusNode = FocusNode();
 
   @override
   void dispose() {
     _scrollController.dispose();
     _messageController.dispose();
+    _inputFocusNode.dispose();
     super.dispose();
   }
 
@@ -93,8 +95,22 @@ class _ChatInterfaceState extends State<ChatInterface> {
           ),
 
           // Message input area
-          MessageInput(
-            controller: _messageController,
+          Consumer<ChatProvider>(
+            builder: (context, chatProvider, child) {
+              // Handle editing message
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (chatProvider.editingMessageContent != null) {
+                  _messageController.text = chatProvider.editingMessageContent!;
+                  _inputFocusNode.requestFocus();
+                  chatProvider.clearEditingMessage();
+                }
+              });
+              
+              return MessageInput(
+                controller: _messageController,
+                focusNode: _inputFocusNode,
+              );
+            },
           ),
         ],
       ),

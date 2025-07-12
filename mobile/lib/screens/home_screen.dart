@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../providers/chat_provider.dart';
 import '../widgets/chat_sidebar.dart';
 import '../widgets/chat_interface.dart';
@@ -616,17 +617,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       width: 80,
                       height: 80,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF10A37F), Color(0xFF0F8C6B)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(
-                        Icons.chat_bubble_outline,
-                        size: 36,
                         color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: SvgPicture.asset(
+                            'assets/icons/icons8-chatgpt.svg',
+                            width: 48,
+                            height: 48,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),

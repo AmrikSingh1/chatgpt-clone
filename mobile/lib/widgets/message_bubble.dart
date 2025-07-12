@@ -79,6 +79,8 @@ class _MessageBubbleState extends State<MessageBubble>
           setState(() {});
           // Update the message in the provider to mark it as animated
           _markMessageAsAnimated();
+          // Notify provider that animation is complete
+          _notifyAnimationComplete();
         }
         return;
       }
@@ -114,6 +116,12 @@ class _MessageBubbleState extends State<MessageBubble>
         chatProvider.updateCurrentChat(updatedChat);
       }
     }
+  }
+
+  void _notifyAnimationComplete() {
+    // Notify the provider that this message's animation is complete
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    chatProvider.onMessageAnimationComplete();
   }
 
   int _getTokenDelay(String currentToken, String previousToken) {
@@ -246,37 +254,40 @@ class _MessageBubbleState extends State<MessageBubble>
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           Flexible(
-      child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.75,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF7F7F8), // Light gray user message background
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-                  // Images if any
-                  if (widget.message.hasImages) ...[
-                    _buildImages(),
-                    if (widget.message.content.isNotEmpty) 
-                      const SizedBox(height: 8),
-                  ],
-                  
-                  // Text content
-                  if (widget.message.content.isNotEmpty)
-                    ChatGPTMessageRenderer(
-                      content: widget.message.content,
-                      baseStyle: const TextStyle(
-                        color: Color(0xFF202123),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w400,
-                        height: 1.5,
+            child: GestureDetector(
+              onLongPressStart: (details) => _showUserMessageContextMenu(context, details.globalPosition),
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.75,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF7F7F8), // Light gray user message background
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Images if any
+                    if (widget.message.hasImages) ...[
+                      _buildImages(),
+                      if (widget.message.content.isNotEmpty) 
+                        const SizedBox(height: 8),
+                    ],
+                    
+                    // Text content
+                    if (widget.message.content.isNotEmpty)
+                      ChatGPTMessageRenderer(
+                        content: widget.message.content,
+                        baseStyle: const TextStyle(
+                          color: Color(0xFF202123),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                          height: 1.5,
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -752,23 +763,182 @@ class _MessageBubbleState extends State<MessageBubble>
           const SizedBox(width: 12),
           
           // Regenerate button
-          _ActionButton(
-            icon: Icons.refresh,
-            onTap: () => _showRegenerateContainer(context),
-            isActive: false,
+          PopupMenuButton<String>(
+            icon: const Icon(
+              Icons.refresh,
+              size: 18,
+              color: Color(0xFF6B7280),
+            ),
+            iconSize: 18,
+            padding: const EdgeInsets.all(4),
+            splashRadius: 20,
+            offset: const Offset(0, -8),
+            color: Colors.white,
+            elevation: 8,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            itemBuilder: (BuildContext context) => [
+              PopupMenuItem<String>(
+                value: 'change_model',
+                child: Row(
+                  children: [
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10A37F).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Icon(
+                        Icons.tune,
+                        size: 12,
+                        color: Color(0xFF10A37F),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Change model',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF374151),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'regenerate',
+                child: Row(
+                  children: [
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6B7280).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Icon(
+                        Icons.refresh,
+                        size: 12,
+                        color: Color(0xFF6B7280),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Regenerate',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF374151),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            onSelected: (String value) {
+              switch (value) {
+                case 'change_model':
+                  _showModelSelector(context);
+                  break;
+                case 'regenerate':
+                  _regenerateResponse(context);
+                  break;
+              }
+            },
           ),
         ],
       ),
     );
   }
 
-  void _showRegenerateContainer(BuildContext context) {
-    showModalBottomSheet(
+  void _showUserMessageContextMenu(BuildContext context, Offset globalPosition) {
+    showMenu<String>(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => _RegenerateContainer(),
+      position: RelativeRect.fromLTRB(
+        globalPosition.dx,
+        globalPosition.dy,
+        globalPosition.dx + 1,
+        globalPosition.dy + 1,
+      ),
+      color: Colors.white,
+      elevation: 8,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      items: [
+        PopupMenuItem<String>(
+          value: 'copy',
+          child: Row(
+            children: [
+              const Icon(
+                Icons.content_copy,
+                size: 16,
+                color: Color(0xFF6B7280),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Copy',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF374151),
+                ),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'edit',
+          child: Row(
+            children: [
+              const Icon(
+                Icons.edit,
+                size: 16,
+                color: Color(0xFF6B7280),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Edit Message',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF374151),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value != null) {
+        switch (value) {
+          case 'copy':
+            _copyUserMessage(context);
+            break;
+          case 'edit':
+            _editUserMessage(context);
+            break;
+        }
+      }
+    });
+  }
+
+  void _copyUserMessage(BuildContext context) {
+    Clipboard.setData(ClipboardData(text: widget.message.content));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Message copied to clipboard'),
+        duration: Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
+  }
+
+  void _editUserMessage(BuildContext context) {
+    // Set the editing message in the provider, which will be picked up by ChatInterface
+    final chatProvider = context.read<ChatProvider>();
+    chatProvider.setEditingMessage(widget.message.id, widget.message.content);
   }
 
   void _copyToClipboard(BuildContext context) {
@@ -842,20 +1012,20 @@ class _MessageBubbleState extends State<MessageBubble>
             errorBuilder: (context, error, stackTrace) => _buildImageError(200),
           )
         : CachedNetworkImage(
-        imageUrl: image.url,
-        width: double.infinity,
-        height: 200,
-        fit: BoxFit.cover,
-        placeholder: (context, url) => Container(
-          width: double.infinity,
-          height: 200,
-          decoration: BoxDecoration(
+            imageUrl: image.url,
+            width: double.infinity,
+            height: 200,
+            fit: BoxFit.cover,
+            placeholder: (context, url) => Container(
+              width: double.infinity,
+              height: 200,
+              decoration: BoxDecoration(
                 color: const Color(0xFFF0F2F5),
                 borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Center(
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
+              ),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
                   valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF10A37F)),
                 ),
               ),
@@ -954,7 +1124,7 @@ class _MessageBubbleState extends State<MessageBubble>
                     ),
               ),
               Container(
-                  decoration: BoxDecoration(
+                decoration: BoxDecoration(
                   color: Colors.black.withOpacity(0.7),
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -1014,7 +1184,7 @@ class _MessageBubbleState extends State<MessageBubble>
   }
 
   Widget _buildImageError(double? height) {
-          return Container(
+    return Container(
       width: double.infinity,
       height: height,
       decoration: BoxDecoration(
@@ -1041,142 +1211,6 @@ class _MessageBubbleState extends State<MessageBubble>
       ),
     );
   }
-}
-
-// Action button widget matching original ChatGPT style
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool isActive;
-
-  const _ActionButton({
-    required this.icon,
-    required this.onTap,
-    required this.isActive,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Icon(
-          icon,
-          size: 18,
-          color: isActive 
-            ? const Color(0xFF10A37F)
-            : const Color(0xFF6B7280),
-        ),
-      ),
-    );
-  }
-}
-
-// Regenerate container widget matching original ChatGPT style
-class _RegenerateContainer extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF10A37F), Color(0xFF0F8C6B)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.chat_bubble_outline,
-                    size: 20,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'ChatGPT can make mistakes. Check important info.',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF6B7280),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 20),
-                  onPressed: () => Navigator.pop(context),
-                  style: IconButton.styleFrom(
-                    foregroundColor: const Color(0xFF6B7280),
-                    minimumSize: const Size(32, 32),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // Divider
-          const Divider(height: 1, color: Color(0xFFE5E7EB)),
-          
-          // Action buttons
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                // Change model button
-                _RegenerateAction(
-                  icon: Icons.tune,
-                  title: 'Change model',
-                  subtitle: 'Choose a different model for this response',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showModelSelector(context);
-                  },
-                ),
-                
-                const SizedBox(height: 16),
-                
-                // Regenerate button
-                _RegenerateAction(
-                  icon: Icons.refresh,
-                  title: 'Regenerate',
-                  subtitle: 'Generate a new response',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _regenerateResponse(context);
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   void _showModelSelector(BuildContext context) {
     final chatProvider = context.read<ChatProvider>();
@@ -1184,10 +1218,10 @@ class _RegenerateContainer extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-      backgroundColor: Colors.white,
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-      ),
+        ),
         child: Container(
           constraints: const BoxConstraints(maxWidth: 400),
           child: Column(
@@ -1277,9 +1311,9 @@ class _RegenerateContainer extends StatelessWidget {
                                 size: 20,
                               )
                             : null,
-                  onTap: () {
+                          onTap: () {
                             chatProvider.setSelectedModel(model.id);
-                    Navigator.pop(context);
+                            Navigator.pop(context);
                             _regenerateWithModel(context, model.id);
                           },
                         );
@@ -1334,79 +1368,31 @@ class _RegenerateContainer extends StatelessWidget {
   }
 }
 
-// Regenerate action item widget
-class _RegenerateAction extends StatelessWidget {
+// Action button widget matching original ChatGPT style
+class _ActionButton extends StatelessWidget {
   final IconData icon;
-  final String title;
-  final String subtitle;
   final VoidCallback onTap;
+  final bool isActive;
 
-  const _RegenerateAction({
+  const _ActionButton({
     required this.icon,
-    required this.title,
-    required this.subtitle,
     required this.onTap,
+    required this.isActive,
   });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: const Color(0xFFE5E7EB),
-            width: 1,
-          ),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF7F7F8),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                icon,
-                size: 20,
-                color: const Color(0xFF6B7280),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF0D0E10),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF6B7280),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.arrow_forward_ios,
-              size: 16,
-              color: Color(0xFF6B7280),
-            ),
-          ],
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Icon(
+          icon,
+          size: 18,
+          color: isActive 
+            ? const Color(0xFF10A37F)
+            : const Color(0xFF6B7280),
         ),
       ),
     );

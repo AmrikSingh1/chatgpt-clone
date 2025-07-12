@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:mime/mime.dart';
 
 class OpenAIService {
-  static const String _apiKey = 'YOUR_OPENAI_API_KEY';
+  static const String _apiKey = 'openai';
   late final Dio _dio;
   
   OpenAIService() {

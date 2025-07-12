@@ -89,6 +89,7 @@ class ApiService {
     required String content,
     List<MessageImage>? images,
     String model = 'gpt-3.5-turbo',
+    CancelToken? cancelToken,
   }) async {
     try {
       final data = {
@@ -117,6 +118,7 @@ class ApiService {
       final response = await _dio.post(
         '/api/chat', 
         data: data,
+        cancelToken: cancelToken,
         options: isLargeRequest ? Options(
           receiveTimeout: const Duration(minutes: 10), // 10 minutes for very large responses
           sendTimeout: const Duration(minutes: 2), // 2 minutes for sending

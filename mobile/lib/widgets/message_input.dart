@@ -9,10 +9,12 @@ import '../services/openai_service.dart';
 
 class MessageInput extends StatefulWidget {
   final TextEditingController controller;
+  final FocusNode? focusNode;
 
   const MessageInput({
     super.key,
     required this.controller,
+    this.focusNode,
   });
 
   @override
@@ -63,8 +65,24 @@ class _MessageInputState extends State<MessageInput> {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
+        // Add rounded corners only on top-left and top-right with more curvature
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+        // Add slightly stronger shadow on top to distinguish from screen content
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x12000000),
+            offset: Offset(0, -3),
+            blurRadius: 12,
+            spreadRadius: 0,
+          ),
+        ],
       ),
       child: SafeArea(
+        // Only apply safe area to bottom to avoid gaps
+        top: false,
         child: Column(
           children: [
             // Selected files preview
@@ -161,98 +179,187 @@ class _MessageInputState extends State<MessageInput> {
   Widget _buildInputArea() {
     final chatProvider = Provider.of<ChatProvider>(context);
     final isTyping = chatProvider.isSendingMessage;
+    final isStreaming = chatProvider.isStreaming;
+    final isStreamingPaused = chatProvider.isStreamingPaused;
     
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
       child: Row(
         children: [
           Expanded(
             child: Container(
               constraints: const BoxConstraints(
-                minHeight: 48,
+                minHeight: 52,
                 maxHeight: 120,
               ),
               decoration: BoxDecoration(
-                color: const Color(0xFFF4F4F4),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
-                  color: const Color(0xFFE0E0E0),
+                  color: const Color(0xFFE5E7EB),
                   width: 1,
                 ),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Attach file button
-                  Container(
-                    margin: const EdgeInsets.only(left: 4, bottom: 4),
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.attach_file,
-                        color: Color(0xFF666666),
-                        size: 22,
+                  // Text input area
+                  Flexible(
+                    child: Container(
+                      constraints: const BoxConstraints(
+                        minHeight: 32,
+                        maxHeight: 80,
                       ),
-                      onPressed: _selectFiles,
-                      style: IconButton.styleFrom(
-                        minimumSize: const Size(40, 40),
-                        padding: EdgeInsets.zero,
+                      child: TextField(
+                        controller: widget.controller,
+                        focusNode: widget.focusNode,
+                        maxLines: null,
+                        textInputAction: TextInputAction.newline,
+                        cursorColor: Colors.black,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Color(0xFF000000),
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'Ask anything',
+                          hintStyle: TextStyle(
+                            color: Color(0xFF8E8E93),
+                            fontSize: 16,
+                          ),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          focusedErrorBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          fillColor: Colors.transparent,
+                          filled: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        onSubmitted: (_) {
+                          if (_canSend) {
+                            _sendMessageWithFiles();
+                          }
+                        },
                       ),
                     ),
                   ),
                   
-                  // Text input
-                  Expanded(
-                    child: TextField(
-                      controller: widget.controller,
-                      maxLines: null,
-                      textInputAction: TextInputAction.newline,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Color(0xFF000000),
-                      ),
-                      decoration: const InputDecoration(
-                        hintText: 'Ask anything',
-                        hintStyle: TextStyle(
-                          color: Color(0xFF8E8E93),
-                          fontSize: 16,
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 12,
-                        ),
-                      ),
-                onSubmitted: (_) {
-                  if (_canSend) {
-                          _sendMessageWithFiles();
-                  }
-                },
-              ),
-                              ),
-                  
-                  // Mic or Send button
+                  // Bottom row with icons
                   Container(
-                    margin: const EdgeInsets.only(right: 4, bottom: 4),
-                    child: _canSend
-                        ? _buildSendButton(isTyping)
-                        : _buildMicButton(),
+                    height: 40,
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Attach file button
+                        PopupMenuButton<String>(
+                          icon: const Icon(
+                            Icons.attach_file,
+                            color: Color(0xFF666666),
+                            size: 22,
+                          ),
+                          iconSize: 22,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                          offset: const Offset(0, -120),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          itemBuilder: (BuildContext context) => [
+                            const PopupMenuItem<String>(
+                              value: 'camera',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.camera_alt,
+                                    color: Colors.black,
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Camera',
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem<String>(
+                              value: 'photos',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.photo,
+                                    color: Colors.black,
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Photos',
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem<String>(
+                              value: 'files',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.insert_drive_file,
+                                    color: Colors.black,
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Files',
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          onSelected: (String value) {
+                            _handleAttachmentSelection(value);
+                          },
+                        ),
+                        
+                        // Dynamic button based on state
+                        _buildActionButton(isTyping, isStreaming, isStreamingPaused),
+                      ],
+                    ),
                   ),
-          ],
-        ),
-      ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSendButton(bool isTyping) {
-    if (isTyping) {
-      // Show pause button while AI is generating response
+  Widget _buildActionButton(bool isTyping, bool isStreaming, bool isStreamingPaused) {
+    // Show pause/resume button during the entire streaming process (including content animation)
+    if (isStreaming || isTyping) {
       return IconButton(
-        icon: const Icon(
-          Icons.pause,
-          color: Color(0xFF666666),
+        icon: Icon(
+          isStreamingPaused ? Icons.play_arrow : Icons.pause,
+          color: const Color(0xFF666666),
           size: 20,
         ),
         style: IconButton.styleFrom(
@@ -262,13 +369,16 @@ class _MessageInputState extends State<MessageInput> {
           padding: EdgeInsets.zero,
         ),
         onPressed: () {
-          // TODO: Implement stop generation
           final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-          // Add pause/stop functionality here
+          if (isStreamingPaused) {
+            chatProvider.resumeStreaming();
+          } else {
+            chatProvider.pauseStreaming();
+          }
         },
       );
-    } else {
-      // Show send button
+    } else if (_canSend) {
+      // Show send button when there's content to send
       return IconButton(
         icon: const Icon(
           Icons.arrow_upward,
@@ -283,6 +393,9 @@ class _MessageInputState extends State<MessageInput> {
         ),
         onPressed: _sendMessageWithFiles,
       );
+    } else {
+      // Show mic button when idle
+      return _buildMicButton();
     }
   }
 
@@ -314,7 +427,7 @@ class _MessageInputState extends State<MessageInput> {
         width: 32,
         height: 32,
         decoration: const BoxDecoration(
-          color: Color(0xFF007AFF),
+          color: Color(0xFF000000),
           shape: BoxShape.circle,
         ),
         child: Stack(
@@ -334,7 +447,7 @@ class _MessageInputState extends State<MessageInput> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: const Color(0xFF007AFF).withOpacity(1.0 - value),
+                          color: const Color(0xFF000000).withOpacity(1.0 - value),
                           width: 2,
                         ),
                       ),
@@ -361,31 +474,26 @@ class _MessageInputState extends State<MessageInput> {
     );
   }
 
-  Future<void> _selectFiles() async {
+  Future<void> _handleAttachmentSelection(String value) async {
     try {
-      // Show camera/gallery options
-      final source = await _showImageSourceDialog();
-      if (source == null) return;
-      
       List<File> files = [];
-      
-      if (source == ImageSource.camera) {
+      if (value == 'camera') {
         final cameraFile = await _fileService.takePhoto();
         if (cameraFile != null) {
           files.add(cameraFile);
         }
-      } else {
-        // Pick from gallery
+      } else if (value == 'photos') {
         files = await _fileService.pickImages(allowMultiple: true);
-      }
-      
+             } else if (value == 'files') {
+         files = await _fileService.pickAnyFile();
+       }
+
       if (files.isNotEmpty) {
-    setState(() {
-          // Use List.from to create a growable list
+        setState(() {
           _selectedFiles = List<File>.from(_selectedFiles)..addAll(files);
           _uploadingStates = List<bool>.from(_uploadingStates)..addAll(List.filled(files.length, false));
-    });
-    _updateSendButton();
+        });
+        _updateSendButton();
       }
     } catch (e) {
       if (mounted) {
@@ -398,88 +506,8 @@ class _MessageInputState extends State<MessageInput> {
       }
     }
   }
-  
-  Future<ImageSource?> _showImageSourceDialog() async {
-    return showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (BuildContext context) {
-        return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-                // Handle bar
-              Container(
-                  width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                    color: const Color(0xFFD1D5DB),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-                const SizedBox(height: 16),
-                
-                const Text(
-                  'Select Image Source',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                
-                // Camera option
-              ListTile(
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10A37F).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.camera_alt,
-                      color: Color(0xFF10A37F),
-                    ),
-                  ),
-                  title: const Text('Camera'),
-                  subtitle: const Text('Take a new photo'),
-                  onTap: () => Navigator.of(context).pop(ImageSource.camera),
-                ),
-                
-                // Gallery option
-              ListTile(
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3B82F6).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.photo_library,
-                      color: Color(0xFF3B82F6),
-                    ),
-                  ),
-                  title: const Text('Gallery'),
-                  subtitle: const Text('Choose from gallery'),
-                  onTap: () => Navigator.of(context).pop(ImageSource.gallery),
-                ),
-                
-                const SizedBox(height: 8),
-            ],
-          ),
-        ),
-        );
-      },
-    );
-  }
+
+
 
   void _removeFile(int index) {
         setState(() {
@@ -583,11 +611,16 @@ class _MessageInputState extends State<MessageInput> {
     _updateSendButton();
     
     try {
-      // Send message with files
-      await chatProvider.sendMessage(
-        messageText.isEmpty ? 'Image' : messageText,
-        images: filesToSend.isNotEmpty ? filesToSend : null,
-      );
+      // Check if we're editing a message
+      if (chatProvider.editingMessageId != null) {
+        await chatProvider.sendEditedMessage(messageText);
+      } else {
+        // Send message with files
+        await chatProvider.sendMessage(
+          messageText.isEmpty ? 'Image' : messageText,
+          images: filesToSend.isNotEmpty ? filesToSend : null,
+        );
+      }
       
     } catch (e) {
       // Restore message text and files on error
@@ -733,19 +766,19 @@ class _ChatGPTImagePreviewState extends State<_ChatGPTImagePreview>
                 
                 // Remove button
                 Positioned(
-                  top: -6,
-                  right: -6,
+                  top: 4,
+                  right: 4,
                   child: GestureDetector(
                     onTap: widget.onRemove,
                     child: Container(
-                      width: 22,
-                      height: 22,
+                      width: 24,
+                      height: 24,
                       decoration: BoxDecoration(
                         color: const Color(0xFF6B7280),
                         shape: BoxShape.circle,
                         border: Border.all(
                           color: Colors.white,
-                          width: 1.5,
+                          width: 2,
                         ),
                         boxShadow: [
                           BoxShadow(
@@ -758,7 +791,7 @@ class _ChatGPTImagePreviewState extends State<_ChatGPTImagePreview>
                       child: const Icon(
                         Icons.close,
                         color: Colors.white,
-                        size: 12,
+                        size: 14,
                       ),
                     ),
                   ),
